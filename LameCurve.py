@@ -3,11 +3,11 @@
 # A python feature for Freecad
 # to make a Lame Curve, Super Egg or Squircle
 # by changing the N parameter:
-# 0 to 1 give an Astroid
+# 0 to 1 give an Astroid      https://en.wikipedia.org/wiki/Astroid
 # 1 give a Diamond
-# 2 give an Ellipse
-# 2 to 4 give a Super Egg
-# 4 and more give a Squircle
+# 2 give an Ellipse           https://en.wikipedia.org/wiki/Ellipse
+# 2 to 4 give a Super Egg     https://en.wikipedia.org/wiki/Superegg
+# 4 and more give a Squircle  https://en.wikipedia.org/wiki/Squircle
 # wrote by Vincent Ballu
 # any remarks: vincent.ballu@gmx.com
 # release as a freeware: on your risks.
@@ -18,12 +18,6 @@ from __future__ import division
 import FreeCAD, Part, math, Draft
 from FreeCAD import Base
 from math import pi
-
-
-
-# https://en.wikipedia.org/wiki/Astroid
-# https://en.wikipedia.org/wiki/Superegg
-# https://en.wikipedia.org/wiki/Squircle
 
 
 class LameCurve:

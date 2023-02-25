@@ -7,12 +7,14 @@
 # versions:
 #01/01/2021 first release
 #21/02/2021 make a cone at the vector end
-#           start on the surface instead the center mass
-#22/02/2021 check if select object is a face
 #22/06/2021 the vector values added
 #           reverse option added
-#           choose center of mass or geometrical
-#24/06/2021: normal on a point and a face
+#           choose center of mass or face center
+#19/02/2023 normal on any vertex added
+#20/02/2023 Cone On/off
+#25/02/2023 normal on any edge added
+#           Vector parameter added
+
 
 
 from __future__ import division
@@ -21,28 +23,40 @@ import Part
 
 class NormalFace:
     def __init__(self, obj, linkface,linkpoint):
+    
         obj.addProperty("App::PropertyInteger","Length","Parameters","Length of the arrow").Length = 5
         obj.addProperty("App::PropertyLinkSub","TargetFace","Parameters","Target face").TargetFace = linkface
+        obj.addProperty("App::PropertyBool","Reverse","Parameters","Reverse the vector if the face is reversed").Reverse = False
+        obj.addProperty("App::PropertyBool","ShowCone","Parameters","Showing the cone").ShowCone = True
+        obj.addProperty("App::PropertyEnumeration","Origin","Parameters","Choose origin")
         if linkpoint:
             obj.addProperty("App::PropertyLinkSub","TargetVertex","Parameters","Target vertex").TargetVertex = linkpoint
             self.TargetVertex = True
-        else : self.TargetVertex = False
-        obj.addProperty("App::PropertyFloat","VectorX","Parameters","Vector x value").VectorX = 0
-        obj.addProperty("App::PropertyFloat","VectorY","Parameters","Vector y value").VectorY = 0
-        obj.addProperty("App::PropertyFloat","VectorZ","Parameters","Vector z value").VectorZ = 0
-        obj.setEditorMode("VectorX", 1)         # user doesn't change !
-        obj.setEditorMode("VectorY", 1)
-        obj.setEditorMode("VectorZ", 1)
-        obj.addProperty("App::PropertyFloat","OriginX","Parameters","Origin x value").OriginX = 0
-        obj.addProperty("App::PropertyFloat","OriginY","Parameters","Origin y value").OriginY = 0
-        obj.addProperty("App::PropertyFloat","OriginZ","Parameters","Origin z value").OriginZ = 0
-        obj.setEditorMode("OriginX", 1)         # user doesn't change !
-        obj.setEditorMode("OriginY", 1)
-        obj.setEditorMode("OriginZ", 1)
-        obj.addProperty("App::PropertyBool","Reverse","Parameters","Reverse the vector if the face is reversed").Reverse = False
-        obj.addProperty("App::PropertyEnumeration","Origin","Parameters","Choose either geometrical center or mass center of the face")
-        if linkpoint:   obj.Origin = ["On Vertex","Face Center","Mass Center"]
-        else :          obj.Origin = ["Face Center","Mass Center"]
+            obj.Origin = ["On Vertex/Edge","Face Center","Mass Center"]
+        else: 
+            self.TargetVertex = False
+            obj.Origin = ["Face Center","Mass Center"]
+            
+        obj.addProperty("App::PropertyFloat","NormOriginX","Parameters","Origin x value").NormOriginX = 0
+        obj.addProperty("App::PropertyFloat","NormOriginY","Parameters","Origin y value").NormOriginY = 0
+        obj.addProperty("App::PropertyFloat","NormOriginZ","Parameters","Origin z value").NormOriginZ = 0
+        obj.setEditorMode("NormOriginX", 1)        
+        obj.setEditorMode("NormOriginY", 1)
+        obj.setEditorMode("NormOriginZ", 1)
+        
+        obj.addProperty("App::PropertyFloat","NormEndX","Parameters","Vector x value").NormEndX = 0
+        obj.addProperty("App::PropertyFloat","NormEndY","Parameters","Vector y value").NormEndY = 0
+        obj.addProperty("App::PropertyFloat","NormEndZ","Parameters","Vector z value").NormEndZ = 0
+        obj.setEditorMode("NormEndX", 1)         
+        obj.setEditorMode("NormEndY", 1)
+        obj.setEditorMode("NormEndZ", 1)
+        
+        obj.addProperty("App::PropertyFloat","NormVectorX","Parameters","Vector x value").NormVectorX = 0
+        obj.addProperty("App::PropertyFloat","NormVectorY","Parameters","Vector y value").NormVectorY = 0
+        obj.addProperty("App::PropertyFloat","NormVectorZ","Parameters","Vector z value").NormVectorZ = 0
+        obj.setEditorMode("NormVectorX", 1)        
+        obj.setEditorMode("NormVectorY", 1)
+        obj.setEditorMode("NormVectorZ", 1)
         
         obj.Proxy = self
 
@@ -52,73 +66,92 @@ class NormalFace:
     def execute(self, obj):
         f = obj.TargetFace[0].getSubObject(obj.TargetFace[1][0])
         face = Part.Face (f)
+        
         if self.TargetVertex:
-            start = obj.TargetVertex[0].getSubObject(obj.TargetVertex[1][0]).Point
+            subobj = obj.TargetVertex[0].getSubObject(obj.TargetVertex[1][0])
+            
+            if isinstance(subobj,Part.Vertex):
+                Vstart = subobj.Point
+            if isinstance(subobj,Part.Edge): 
+                curve = subobj.Curve.trim(subobj.FirstParameter, subobj.LastParameter)
+                Vstart =curve.value(curve.parameterAtDistance(curve.length()/2, curve.FirstParameter))
+                
         if obj.Origin == "Face Center" :
             (umin, umax, vmin, vmax) = face.ParameterRange
-            start = face.valueAt((umax+umin)/2,(vmax+vmin)/2)
+            Vstart = face.valueAt((umax+umin)/2,(vmax+vmin)/2)
         if obj.Origin == "Mass Center":
-            start = face.CenterOfMass    
+            Vstart = face.CenterOfMass    
    
         if obj.Reverse == False:
-            vector = face.normalAt(*face.Surface.parameter(start))
+            Vend = Vstart+face.normalAt(*face.Surface.parameter(Vstart))*obj.Length
         else:
-            vector = -face.normalAt(*face.Surface.parameter(start))
-            
-            
-        VL = start+vector*obj.Length                #Fin de la fleche
-        norm = Part.makeLine(start,VL)              #creer le segment
-        rc = obj.Length/10                          #rayon du cone 1/10 du segement
-        hc = rc*3                                   #hauteur du cone 3x le rayon
-        cone = Part.makeCone(0,rc,hc,VL,start-VL)   #creer le cone
-        comp=Part.Compound([norm,cone])             #creer un compound
-        obj.Shape = comp
+            Vend = Vstart-face.normalAt(*face.Surface.parameter(Vstart))*obj.Length
+       
+        norm = Part.makeLine(Vstart,Vend)              #creer le segment
+        rc = obj.Length/10                             #rayon du cone 1/10 du segement
+        hc = rc*3                                       #hauteur du cone 3x le rayon
+        cone = Part.makeCone(0,rc,hc,Vend,Vstart-Vend)   #creer le cone
+        if obj.ShowCone == True:
+            obj.Shape = Part.Compound([norm,cone])
+        else:
+            obj.Shape = norm 
         
-        obj.VectorX = vector.x                      #Affecte les valeurs aux paramêtres
-        obj.VectorY = vector.y
-        obj.VectorZ = vector.z
+        obj.NormEndX = Vend.x                      #Affecte les valeurs aux paramêtres
+        obj.NormEndY = Vend.y
+        obj.NormEndZ = Vend.z
         
-        obj.OriginX = start.x
-        obj.OriginY = start.y
-        obj.OriginZ = start.z
+        obj.NormOriginX = Vstart.x
+        obj.NormOriginY = Vstart.y
+        obj.NormOriginZ = Vstart.z
+        
+        obj.NormVectorX = (obj.NormEndX - obj.NormOriginX)/obj.Length
+        obj.NormVectorY = (obj.NormEndY - obj.NormOriginY)/obj.Length
+        obj.NormVectorZ = (obj.NormEndZ - obj.NormOriginZ)/obj.Length
 
 
 def MakeNormal():
-
-    doc = FreeCAD.activeDocument()
-    try:
-        What = Gui.Selection.getSelectionEx()[0]
-        sub0 = What.SubElementNames[0]                          #essaye de récuperer le point
-        sub1 = What.SubElementNames[1]                          #essaye de recuperer la face
-        print ("Selection :",sub0,sub1)
+    LinkFace = False
+    LinkObject = False
+    try:                                                        
+        What = Gui.Selection.getSelectionEx()[0]              
+        subname = What.SubElementNames[0]                       
+        subobject = What.Object.getSubObject(What.SubElementNames[0])
+      
+        if isinstance(subobject,Part.Face):
+            LinkFace = (What.Object,subname)                    
+            try:        
+                subname = What.SubElementNames[1]                
+                subobject = What.Object.getSubObject(What.SubElementNames[1])
+                if isinstance(subobject,Part.Vertex) or isinstance(subobject,Part.Edge):
+                    LinkObject = (What.Object,subname)
+            except: 
+                LinkObject = False 
                 
-        if sub0[0:4] == "Face" and sub1[0:6] == "Vertex":       #associe correctement face et vertex
-            linkface =  (What.Object, sub0)
-            linkpoint = (What.Object, sub1)
-        elif sub0[0:6] == "Vertex" and sub1[0:4] == "Face":
-            linkface =  (What.Object, sub1)
-            linkpoint = (What.Object, sub0)
+        else:
+            if isinstance(subobject,Part.Vertex) or isinstance(subobject,Part.Edge):
+                LinkObject = (What.Object,subname)
+                try:
+                    subname = What.SubElementNames[1] 
+                    subobject = What.Object.getSubObject(What.SubElementNames[1])             
+                    if isinstance(subobject,Part.Face):
+                        LinkFace = (What.Object,subname)
+                    else:
+                        LinkFace = False
+                except:                                         
+                    LinkFace = False
+    
+        # print ("Selection face:", LinkFace)   
+        # print ("Selection autre:", LinkObject)
         
-        obj = doc.addObject("Part::FeaturePython","FaceNormal")           
-        NormalFace(obj, linkface,linkpoint)
-        obj.ViewObject.Proxy = 0    
- 
-    except:                                                     #error pas de sub1
-        try:                                                    #donc uniquement une face
-            What = Gui.Selection.getSelectionEx()[0]
-            sub0 = What.SubElementNames[0]
-            print ("Selection :",sub0)
-            
-            linkface = (What.Object, sub0)
-            linkpoint = False
-           
-            if sub0[0:4] == "Face":
-                obj = doc.addObject("Part::FeaturePython","FaceNormal")           
-                NormalFace(obj, linkface,linkpoint)
-                obj.ViewObject.Proxy = 0
-                
-            else: print("Select a face or a vertex with his face, then run the macro.")
-            
-        except: print("Select a face or a vertex with his face, then run the macro.")
+        if LinkFace:    
+            doc = FreeCAD.activeDocument()
+            obj = doc.addObject("Part::FeaturePython","FaceNormal")           
+            NormalFace(obj,LinkFace,LinkObject)
+            obj.ViewObject.Proxy = 0         
+        else:
+            print("Selection error: Select a face or a vertex/edge and a face.")
+    except:                                                      
+        print("Selection error: Select a face or a vertex/edge and a face.")       
+  
    
 MakeNormal()
